@@ -158,7 +158,7 @@ def unfix_dof(m):
     m.fs.battery.nameplate_energy.fix(8000)
     m.fs.battery.nameplate_power.fix(400)
 
-def fix_dof_and_initialize(
+def initialize_system(
     m,
 ):
     """Fix degrees of freedom and initialize the flowsheet
@@ -172,6 +172,12 @@ def fix_dof_and_initialize(
     m.fs.battery.initialize()
 
     return 
+
+def fix_vars(m):
+    # Add some fixes here
+    m.fs.battery.nameplate_energy.fix(8000)
+    m.fs.battery.nameplate_power.fix(400)
+    m.fs.pv_gen.fix(700)
 
 def add_battery(m):
     """ This model does not use the flowsheet's time domain. Instead, it only models a single timestep, with initial

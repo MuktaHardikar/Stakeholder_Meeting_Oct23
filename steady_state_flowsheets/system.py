@@ -1,6 +1,8 @@
-from pyomo.environ import Var, Objective, units as pyunits
+from pyomo.environ import ConcreteModel, Var, Objective, units as pyunits
+from idaes.core import FlowsheetBlock
 import pandas as pd
 from steady_state_flowsheets.battery import BatteryStorage
+from steady_state_flowsheets.simple_RO_unit import ROUnit
 
 def define_system_vars(m):
     if "USD_2021" not in pyunits._pint_registry:
@@ -181,3 +183,23 @@ def add_battery(m):
     m.fs.battery.dt.set_value(1)                 # Time step
 
     return m.fs.battery
+
+def build_pv_battery_flowsheet(m = None,
+                               pv_gen = 1000,
+                               electricity_price = 0.1,
+                               ro_capacity = 6000,
+                               ro_elec_req = 944.3,
+                               pv_oversize = 1,
+                               fixed_battery_size = None):
+    
+    m = ConcreteModel()
+    # m.fs = FlowsheetBlock(dynamic=False)
+
+    # m.fs.pv_size = pv_oversize*ro_elec_req
+    # m.fs.battery = BatteryStorage()
+
+    # m.fs.RO = ROUnit()
+    # define_system_vars(m)
+    # add_steady_state_constraints(m)
+
+    return m

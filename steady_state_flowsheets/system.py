@@ -3,6 +3,7 @@ from idaes.core import FlowsheetBlock
 import pandas as pd
 from steady_state_flowsheets.battery import BatteryStorage
 from steady_state_flowsheets.simple_RO_unit import ROUnit
+import datetime
 
 def define_system_vars(m):
     if "USD_2021" not in pyunits._pint_registry:
@@ -65,7 +66,6 @@ def define_system_vars(m):
         )
 
 def add_steady_state_constraints(m):
-    m.fs.pv_gen.fix(1000)
     # Add energy flow balance
     @m.Constraint(doc="System energy flow")
     def eq_pv_elec_gen(b):
@@ -138,10 +138,10 @@ def add_pv_ro_constraints(mp):
     # Set objective
     mp.obj = Objective(expr=mp.LCOW)
 
-def eval_surrogate(surrogate, design_size, Hour, Day):
+def eval_surrogate(surrogate, design_size = 1000,Day = 1, Hour = 1):
     input = pd.DataFrame.from_dict([{'design_size':design_size, 'Hour':Hour, 'Day':Day}], orient='columns')
     hourly_gen = surrogate.evaluate_surrogate(input)
-    return hourly_gen.values[0][0]
+    return max(0,hourly_gen.values[0][0])
 
 def unfix_dof(m):
     """
@@ -153,8 +153,10 @@ def unfix_dof(m):
     Returns:
         None
     """
-    m.fs.battery.nameplate_energy.unfix()
-    m.fs.battery.nameplate_power.unfix()
+    # m.fs.battery.nameplate_energy.unfix()
+    # m.fs.battery.nameplate_power.unfix()
+    m.fs.battery.nameplate_energy.fix(8000)
+    m.fs.battery.nameplate_power.fix(400)
 
 def fix_dof_and_initialize(
     m,
@@ -184,7 +186,7 @@ def add_battery(m):
 
     return m.fs.battery
 
-def build_pv_battery_flowsheet(m = None,
+def steady_state_flowsheet(m = None,
                                pv_gen = 1000,
                                electricity_price = 0.1,
                                ro_capacity = 6000,
@@ -192,14 +194,25 @@ def build_pv_battery_flowsheet(m = None,
                                pv_oversize = 1,
                                fixed_battery_size = None):
     
-    m = ConcreteModel()
-    # m.fs = FlowsheetBlock(dynamic=False)
+    if m is None:
+        m = ConcreteModel()
+    m.fs = FlowsheetBlock(dynamic=False)
 
-    # m.fs.pv_size = pv_oversize*ro_elec_req
-    # m.fs.battery = BatteryStorage()
+    m.fs.pv_size = pv_oversize*ro_elec_req
+    m.fs.battery = add_battery(m)
 
-    # m.fs.RO = ROUnit()
-    # define_system_vars(m)
-    # add_steady_state_constraints(m)
+    m.fs.RO = ROUnit()
+    define_system_vars(m)
+    add_steady_state_constraints(m)
+    m.fs.pv_gen.fix(pv_gen)
+    m.fs.electricity_price.fix(electricity_price)
+    m.fs.elec_price.fix(electricity_price)
 
     return m
+
+def get_elec_tier(Hour = 1):
+    electric_tiers = {'Tier 1':0.19825,'Tier 2':0.06124,'Tier 3':0.24445,'Tier 4':0.06126}
+    if (Hour < 12) | (Hour > 18):
+        return electric_tiers['Tier 2']
+    else:
+        return electric_tiers['Tier 1']

@@ -9,7 +9,7 @@ def create_plot(mp):
     color1 = '#3971ad'
     color2 = '#c07432'
     color3 = '#8c8b8b'
-    n = 23
+    n = 24
     hour = [i for i in range(1,n+1)]
     battery_state = np.array([value(mp.blocks[i].process.fs.battery.state_of_charge[0]) for i in range(n)])
     pv_gen = np.array([value(mp.blocks[i].process.fs.elec_generation) for i in range(n)])
@@ -17,9 +17,9 @@ def create_plot(mp):
     electric_price = np.array([value(mp.blocks[i].process.fs.elec_price) for i in range(n)])
     ro_demand = np.array([value(mp.blocks[i].process.fs.elec_price) for i in range(n)])
     grid_cost = ([value(mp.blocks[i].process.grid_cost)/
-            value(pyunits.convert(6000 * pyunits.m**3 / pyunits.day, to_units=pyunits.m**3 / pyunits.hour)) for i in range(24) ])
+            value(pyunits.convert(6000 * pyunits.m**3 / pyunits.day, to_units=pyunits.m**3 / pyunits.hour)) for i in range(n) ])
     lcow = ([0.4+((value(mp.annualized_capital_cost) /365 / 24) + value(mp.blocks[i].process.grid_cost)) /
-            value(pyunits.convert(6000 * pyunits.m**3 / pyunits.day, to_units=pyunits.m**3 / pyunits.hour)) for i in range(24)])
+            value(pyunits.convert(6000 * pyunits.m**3 / pyunits.day, to_units=pyunits.m**3 / pyunits.hour)) for i in range(n)])
     pv_to_ro = np.array([value(mp.blocks[i].process.fs.pv_to_ro) for i in range(n)])
     pv_to_battery = np.array([value(mp.blocks[i].process.fs.battery.elec_in[0]) for i in range(n)])
     battery_to_ro = np.array([value(mp.blocks[i].process.fs.battery.elec_out[0]) for i in range(n)])
@@ -58,38 +58,38 @@ def create_plot(mp):
 
     ax4.spines.right.set_position(("axes", 1.1))
 
-    # # line1 = ax4.plot(hour, elec_prices, dashes=[6, 4], color="#ebe8e8", label='Grid Price')  
-    # ax4.set_ylabel('Grid Price ($/kWh)', ha='center', va='center', fontsize=16, labelpad=20)
-    # ax4.set_ylim([0,0.6])
-    # ax4.yaxis.set_major_formatter('${x:1.2f}')
-    # leg4 = ax4.legend(loc="lower left", frameon = False, bbox_to_anchor=(0.8, 1.0, 0.15, 1),
-    #     ncols=1, mode="expand", fontsize=14, borderaxespad=0.)
+    line1 = ax4.plot(hour, electric_price, dashes=[6, 4], color="#ebe8e8", label='Grid Price')  
+    ax4.set_ylabel('Grid Price ($/kWh)', ha='center', va='center', fontsize=16, labelpad=20)
+    ax4.set_ylim([0,0.6])
+    ax4.yaxis.set_major_formatter('${x:1.2f}')
+    leg4 = ax4.legend(loc="lower left", frameon = False, bbox_to_anchor=(0.8, 1.0, 0.15, 1),
+        ncols=1, mode="expand", fontsize=14, borderaxespad=0.)
 
-    # line2 = ax5.plot(hour, lcow,linestyle='dashed', color='k',label='LCOW')
-    # ax5.set_ylabel(f"LCOW ({str('$')}"+f'/m3)', ha='center', va='center', fontsize=16, labelpad=20)
-    # ax5.set_ylim([0,1.5])
-    # ax5.yaxis.set_major_formatter('${x:1.2f}')
-    # leg5 = ax5.legend(loc="lower left", frameon = False, bbox_to_anchor=(0.67, 1.0, 0.15, 1),
-    #     ncols=1, mode="expand", fontsize=14, borderaxespad=0.)
+    line2 = ax5.plot(hour, lcow,linestyle='dashed', color='k',label='LCOW')
+    ax5.set_ylabel(f"LCOW ({str('$')}"+f'/m3)', ha='center', va='center', fontsize=16, labelpad=20)
+    ax5.set_ylim([0,1.5])
+    ax5.yaxis.set_major_formatter('${x:1.2f}')
+    leg5 = ax5.legend(loc="lower left", frameon = False, bbox_to_anchor=(0.67, 1.0, 0.15, 1),
+        ncols=1, mode="expand", fontsize=14, borderaxespad=0.)
     
-    # ax4.tick_params(axis="y", labelsize=16)
-    # ax5.tick_params(axis="y", labelsize=16)
+    ax4.tick_params(axis="y", labelsize=16)
+    ax5.tick_params(axis="y", labelsize=16)
 
-    # ax4.spines['right'].set_color("#6e6e6e")
-    # ax5.spines['right'].set_color("k")
-    # ax4.tick_params(axis='y', colors="#6e6e6e")
-    # ax5.tick_params(axis='y', colors="k")
-    # ax4.yaxis.label.set_color("#6e6e6e")
-    # ax5.yaxis.label.set_color('k')
+    ax4.spines['right'].set_color("#6e6e6e")
+    ax5.spines['right'].set_color("k")
+    ax4.tick_params(axis='y', colors="#6e6e6e")
+    ax5.tick_params(axis='y', colors="k")
+    ax4.yaxis.label.set_color("#6e6e6e")
+    ax5.yaxis.label.set_color('k')
 
-    # ab = ax5.annotate(f"LCOW=${mp.LCOW():1.2f}", (0.01, 0.85), xycoords='axes fraction', 
-    #                     fontsize=16, color="k",
-    #                     bbox=dict(boxstyle="square",
-    #                     fc="white", ec="k", lw=1))
+    ab = ax5.annotate(f"LCOW=${mp.LCOW():1.2f}", (0.01, 0.85), xycoords='axes fraction', 
+                        fontsize=16, color="k",
+                        bbox=dict(boxstyle="square",
+                        fc="white", ec="k", lw=1))
     
-    # ac = ax5.annotate(f"Battery Size={value(mp.blocks[0].process.fs.battery.nameplate_energy):1.0f} kWh", (0.8, 0.85), xycoords='axes fraction', 
-    #                     fontsize=16, color="k",
-    #                     bbox=dict(boxstyle="square",
-    #                     fc="white", ec="k", lw=1))
+    ac = ax5.annotate(f"Battery Size={value(mp.blocks[0].process.fs.battery.nameplate_energy):1.0f} kWh", (0.8, 0.85), xycoords='axes fraction', 
+                        fontsize=16, color="k",
+                        bbox=dict(boxstyle="square",
+                        fc="white", ec="k", lw=1))
     
-    # ab.set_zorder(100)
+    ab.set_zorder(100)

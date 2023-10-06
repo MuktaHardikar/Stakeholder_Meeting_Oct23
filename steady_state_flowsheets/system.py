@@ -1,4 +1,4 @@
-from pyomo.environ import Var, units as pyunits
+from pyomo.environ import Var, Objective, units as pyunits
 import pandas as pd
 from steady_state_flowsheets.battery import BatteryStorage
 

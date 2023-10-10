@@ -1,9 +1,10 @@
-from pyomo.environ import ConcreteModel, Var, Objective, units as pyunits
+from pyomo.environ import ConcreteModel, Var, value, Objective, units as pyunits
 from idaes.core import FlowsheetBlock
 import pandas as pd
 from steady_state_flowsheets.battery import BatteryStorage
 from steady_state_flowsheets.simple_RO_unit import ROUnit
 import datetime
+from idaes.apps.grid_integration.multiperiod.multiperiod import MultiPeriodModel
 
 def define_system_vars(m):
     if "USD_2021" not in pyunits._pint_registry:
@@ -141,7 +142,11 @@ def add_pv_ro_constraints(mp):
 def eval_surrogate(surrogate, design_size = 1000,Day = 1, Hour = 1):
     input = pd.DataFrame.from_dict([{'design_size':design_size, 'Hour':Hour, 'Day':Day}], orient='columns')
     hourly_gen = surrogate.evaluate_surrogate(input)
-    return max(0,hourly_gen.values[0][0])
+    if hourly_gen.values[0][0] <= 50:
+        return 0
+    else:
+        return hourly_gen.values[0][0]
+    # return max(0,hourly_gen.values[0][0])
 
 def unfix_dof(m):
     """
@@ -153,9 +158,7 @@ def unfix_dof(m):
     Returns:
         None
     """
-    # m.fs.battery.nameplate_energy.unfix()
-    # m.fs.battery.nameplate_power.unfix()
-    m.fs.battery.nameplate_energy.fix(8000)
+    m.fs.battery.nameplate_energy.fix(6000)
     m.fs.battery.nameplate_power.fix(400)
 
 def initialize_system(
@@ -205,7 +208,7 @@ def steady_state_flowsheet(m = None,
     m.fs = FlowsheetBlock(dynamic=False)
 
     m.fs.pv_size = pv_oversize*ro_elec_req
-    m.fs.battery = add_battery(m)
+    m.fs.battery = BatteryStorage()
 
     m.fs.RO = ROUnit()
     define_system_vars(m)
@@ -222,3 +225,74 @@ def get_elec_tier(Hour = 1):
         return electric_tiers['Tier 2']
     else:
         return electric_tiers['Tier 1']
+    
+def get_pv_ro_variable_pairs(t1, t2):
+    """
+    This function returns pairs of variables that need to be connected across two time periods
+
+    Args:
+        t1: current time block
+        t2: next time block
+
+    Returns:
+        None
+    """
+    return [
+        (t1.fs.battery.state_of_charge[0], t2.fs.battery.initial_state_of_charge),
+        (t1.fs.battery.energy_throughput[0], t2.fs.battery.initial_energy_throughput),
+        (t1.fs.battery.nameplate_power, t2.fs.battery.nameplate_power),
+        (t1.fs.battery.nameplate_energy, t2.fs.battery.nameplate_energy),
+        ]
+    
+def optimize(m):
+    m.fs.battery.nameplate_energy.unfix()
+    m.fs.battery.nameplate_power.unfix()
+    return
+
+def optimize_multiperiod_pv_battery_model(
+        n_time_points= 24,
+        ro_capacity = 6000, # m3/day
+        ro_elec_req = 1000, # kW
+        pv_oversize = 1,
+        surrogate = None):
+    
+    # create the multiperiod object
+    mp_opt = MultiPeriodModel(
+        n_time_points=n_time_points,
+        process_model_func= steady_state_flowsheet,
+        linking_variable_func= get_pv_ro_variable_pairs,
+        unfix_dof_func= optimize,
+    )
+
+    '''The `MultiPeriodModel` class helps transfer existing steady-state
+    process models to multiperiod versions that contain dynamic time coupling'''
+
+    # unfix_dof - This is where we fix or unfix battery size, power, etc...
+    # initialize_system - This is where we initialize the battery
+    
+    # Flowsheet options is where we define the input options for the steady-state flowsheet
+    flowsheet_options={ t: { 
+                            "pv_gen": eval_surrogate(surrogate, design_size = 1000, Day = 1, Hour = t%24),
+                            "electricity_price": get_elec_tier(Hour = t%24),
+                            "ro_capacity": ro_capacity, 
+                            "ro_elec_req": ro_elec_req,
+                            "pv_oversize": pv_oversize} 
+                            for t in range(n_time_points)
+    }
+
+    # Build a multi-period capable model using user-provided functions
+    mp_opt.build_multi_period_model(
+        model_data_kwargs=flowsheet_options)
+    
+    # Fix the initial state of charge to zero
+    mp_opt.blocks[0].process.fs.battery.initial_state_of_charge.fix(0)
+
+    # Set capital costs and the objective function that apply across all time periods
+    add_pv_ro_constraints(mp_opt)
+
+    return mp_opt
+
+def print_results(mp):
+    labels = ['pv_size', 'battery_power', 'battery_energy', 'LCOW']
+    for idx, v in enumerate([mp.blocks[0].process.fs.pv_size, mp.blocks[0].process.fs.battery.nameplate_power, mp.blocks[0].process.fs.battery.nameplate_energy, mp.LCOW]):
+        print(f'{labels[idx]:<20s}', f'{value(v):<10,.2f}')

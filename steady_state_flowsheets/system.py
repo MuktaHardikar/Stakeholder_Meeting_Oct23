@@ -91,7 +91,7 @@ def add_steady_state_constraints(m):
     def grid_cost(b):
         return (m.fs.electricity_price * b.fs.grid_to_ro * b.fs.battery.dt)
 
-def add_pv_ro_constraints(mp):
+def add_costing_constraints(mp):
     """
     This function adds constraints that connect variables across two time periods
 
@@ -302,7 +302,7 @@ def optimize_multiperiod_pv_battery_model(
     mp_opt.blocks[0].process.fs.battery.initial_state_of_charge.fix(0)
 
     # Set capital costs and the objective function that apply across all time periods
-    add_pv_ro_constraints(mp_opt)
+    add_costing_constraints(mp_opt)
 
     return mp_opt
 

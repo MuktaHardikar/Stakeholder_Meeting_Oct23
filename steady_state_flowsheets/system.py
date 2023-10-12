@@ -31,12 +31,12 @@ def define_system_vars(m):
             doc = 'PV curtailment'
         )
 
-    m.fs.elec_price = Var(
-            initialize = 0.1,
-            bounds = (0,None),
-            units = pyunits.USD_2021,
-            doc = 'Electric Cost'
-        )
+    # m.fs.elec_price = Var(
+    #         initialize = 0.1,
+    #         bounds = (0,None),
+    #         units = pyunits.USD_2021,
+    #         doc = 'Electric Cost'
+    #     )
 
     m.fs.elec_generation = Var(
             initialize = 1000,
@@ -46,6 +46,13 @@ def define_system_vars(m):
         )
 
     m.fs.pv_gen = Var(
+            initialize = 1000,
+            bounds = (0,None),
+            units = pyunits.kW,
+            doc = 'PV Power Gen'
+        )
+    
+    m.fs.pv_size = Var(
             initialize = 1000,
             bounds = (0,None),
             units = pyunits.kW,
@@ -207,15 +214,15 @@ def steady_state_flowsheet(m = None,
         m = ConcreteModel()
     m.fs = FlowsheetBlock(dynamic=False)
 
-    m.fs.pv_size = pv_oversize*ro_elec_req
     m.fs.battery = BatteryStorage()
 
     m.fs.RO = ROUnit()
     define_system_vars(m)
     add_steady_state_constraints(m)
+    m.fs.pv_size.fix(pv_oversize*ro_elec_req)
     m.fs.pv_gen.fix(pv_gen)
     m.fs.electricity_price.fix(electricity_price)
-    m.fs.elec_price.fix(electricity_price)
+    # m.fs.elec_price.fix(electricity_price)
 
     return m
 
@@ -244,9 +251,16 @@ def get_pv_ro_variable_pairs(t1, t2):
         (t1.fs.battery.nameplate_energy, t2.fs.battery.nameplate_energy),
         ]
     
-def optimize(m):
+def optimize_battery(m):
     m.fs.battery.nameplate_energy.unfix()
     m.fs.battery.nameplate_power.unfix()
+    return
+
+def optimize_pv(m):
+    m.fs.battery.nameplate_energy.unfix()
+    m.fs.battery.nameplate_power.unfix()
+    m.fs.pv_size.unfix()
+    
     return
 
 def optimize_multiperiod_pv_battery_model(
@@ -261,7 +275,50 @@ def optimize_multiperiod_pv_battery_model(
         n_time_points=n_time_points,
         process_model_func= steady_state_flowsheet,
         linking_variable_func= get_pv_ro_variable_pairs,
-        unfix_dof_func= optimize,
+        unfix_dof_func= optimize_battery,
+    )
+
+    '''The `MultiPeriodModel` class helps transfer existing steady-state
+    process models to multiperiod versions that contain dynamic time coupling'''
+
+    # unfix_dof - This is where we fix or unfix battery size, power, etc...
+    # initialize_system - This is where we initialize the battery
+    
+    # Flowsheet options is where we define the input options for the steady-state flowsheet
+    flowsheet_options={ t: { 
+                            "pv_gen": eval_surrogate(surrogate, design_size = 1000, Day = 1, Hour = t%24),
+                            "electricity_price": get_elec_tier(Hour = t%24),
+                            "ro_capacity": ro_capacity, 
+                            "ro_elec_req": ro_elec_req,
+                            "pv_oversize": pv_oversize} 
+                            for t in range(n_time_points)
+    }
+
+    # Build a multi-period capable model using user-provided functions
+    mp_opt.build_multi_period_model(
+        model_data_kwargs=flowsheet_options)
+    
+    # Fix the initial state of charge to zero
+    mp_opt.blocks[0].process.fs.battery.initial_state_of_charge.fix(0)
+
+    # Set capital costs and the objective function that apply across all time periods
+    add_pv_ro_constraints(mp_opt)
+
+    return mp_opt
+
+def optimize_pv_and_battery(
+        n_time_points= 24,
+        ro_capacity = 6000, # m3/day
+        ro_elec_req = 1000, # kW
+        pv_oversize = 1,
+        surrogate = None):
+    
+    # create the multiperiod object
+    mp_opt = MultiPeriodModel(
+        n_time_points=n_time_points,
+        process_model_func= steady_state_flowsheet,
+        linking_variable_func= get_pv_ro_variable_pairs,
+        unfix_dof_func= optimize_pv,
     )
 
     '''The `MultiPeriodModel` class helps transfer existing steady-state
@@ -296,3 +353,7 @@ def print_results(mp):
     labels = ['pv_size', 'battery_power', 'battery_energy', 'LCOW']
     for idx, v in enumerate([mp.blocks[0].process.fs.pv_size, mp.blocks[0].process.fs.battery.nameplate_power, mp.blocks[0].process.fs.battery.nameplate_energy, mp.LCOW]):
         print(f'{labels[idx]:<20s}', f'{value(v):<10,.2f}')
+
+def print_system_results(m):
+    for v in m.fs.component_data_objects(ctype=Var, active=True, descend_into=True):
+        print(f'{str(v):<40s}', f'{value(v):<10,.1f}', pyunits.get_units(v))

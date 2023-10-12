@@ -37,8 +37,6 @@ _log = idaeslog.getLogger(__name__)
 @declare_process_block_class("BatteryStorage", doc="Simple battery model")
 class BatteryStorageData(UnitModelBlockData):
     """
-    Wind plant using turbine powercurve and resource data.
-    Unit model to convert wind resource into electricity.
     """
     CONFIG = ConfigBlock()
     CONFIG.declare("dynamic", ConfigValue(
